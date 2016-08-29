@@ -85,16 +85,13 @@ func (config *Config) Compile() error {
 	}
 
 	// validate output
-	defaultIndex := -1
-	for ii, out := range config.Outputs {
+	for _, out := range config.Outputs {
 		if out.Pattern != "" {
 			re, err := regexp.Compile(out.Pattern)
 			if err != nil {
 				return fmt.Errorf("Failed to compile output regexp '%s', %v", out.Pattern, err)
 			}
 			out.expr = re
-		} else {
-			defaultIndex = ii
 		}
 		if out.Format == "" {
 			out.Format = "[%category%] %message%"
@@ -120,14 +117,33 @@ func (config *Config) Compile() error {
 		}
 	}
 
-	// ensure the default pattern is the first entry
-	if defaultIndex == -1 {
-		config.Outputs = make(OutputChain, len(config.Outputs)+1)
-		copy(config.Outputs[1:], config.Outputs)
-	} else {
-		defaultOut := config.Outputs[defaultIndex]
-		copy(config.Outputs[1:], config.Outputs[:defaultIndex])
-		config.Outputs[0] = defaultOut
+	// go through all outputs, and combine those with matching patterns into a
+	// single MutliProcessor.
+	m := make(map[string]*ConfigOutput)
+	for _, out := range config.Outputs {
+		if existing, ok := m[out.Pattern]; ok {
+			mp := NewMultiProcessor()
+			mp.Add(existing.processor)
+			mp.Add(out.processor)
+			existing.processor = mp
+		} else {
+			m[out.Pattern] = out
+		}
+	}
+
+	// flatten the map of outputs back into an array. Array
+	// index zero is reserved for the default processor, and
+	// is allowed to by nil. Start by appending at index 1.
+	config.Outputs = make(OutputChain, 1, len(m))
+	for _, out := range m {
+		if out.Pattern == "" {
+			if config.Outputs[0] != nil {
+				panic("Two default outputs were not properly collapsed into a MultiProcessor")
+			}
+			config.Outputs[0] = out
+		} else {
+			config.Outputs = append(config.Outputs, out)
+		}
 	}
 
 	return nil
