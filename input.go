@@ -188,7 +188,7 @@ func (im *InputManager) Reconfigure(config *Config) {
 
 						userid, err = strconv.ParseUint(user.Uid, 10, 32)
 						if err != nil {
-							fmt.Fprintf(os.Stderr, "ERROR: Malformed user %s: %v", userid, err)
+							fmt.Fprintf(os.Stderr, "ERROR: Malformed user %s: %v", user.Uid, err)
 							continue
 						}
 
