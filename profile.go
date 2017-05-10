@@ -104,7 +104,7 @@ func StartProfileServerHandler(m http.Handler) {
 		}
 		defer l.Close()
 
-		log.Print("Stating profile server at http://", l.Addr())
+		log.Print("Starting profile server at http://", l.Addr())
 		server := &http.Server{
 			Handler: mux,
 		}
