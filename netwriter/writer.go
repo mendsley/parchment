@@ -76,7 +76,7 @@ func New(config *Config) (*Writer, error) {
 		case TimestampDefault:
 			timeformat = time.RFC3339 + " "
 		case TimestampNano:
-			timeformat = time.RFC3339Nano + " "
+			timeformat = "2006-01-02T15:04:05.000000000Z07:00 " // RFC3339Nano (pad trailing zeros)
 		}
 
 		const BufferSize = 4096
