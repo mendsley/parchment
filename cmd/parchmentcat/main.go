@@ -25,10 +25,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mendsley/parchment/netwriter"
@@ -54,7 +56,6 @@ func main() {
 
 	config := &netwriter.Config{
 		Address:   remote,
-		Category:  *flagCategory,
 		Timestamp: netwriter.TimestampNone,
 		Timeout:   *flagTimeout,
 	}
@@ -70,10 +71,35 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ERROR: Failed to create writer: %v\n", err)
 		os.Exit(-1)
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Wait()
+	go func() {
+		defer wg.Done()
+		w.Run(config)
+	}()
 	defer w.Close()
 
-	_, err = io.Copy(w, os.Stdin)
-	if err != nil && err != io.EOF {
-		fmt.Fprintf(os.Stderr, "ERROR: Failed to write log data: %v\n", err)
+	const BufferSize = 4096
+	br := bufio.NewReaderSize(os.Stdin, BufferSize)
+	categoryAsBytes := []byte(*flagCategory)
+
+	for {
+		line, err := br.ReadBytes('\n')
+		if nline := len(line); nline > 1 {
+			err := w.AddMessage(categoryAsBytes, line[:nline-1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to add message: %v", err)
+				os.Exit(-1)
+			}
+		}
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read stdin: %v", err)
+			os.Exit(-1)
+		}
 	}
 }
