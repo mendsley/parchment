@@ -153,7 +153,7 @@ func main() {
 				} else {
 					var entry LogEntry
 					if err := json.Unmarshal([]byte(line), &entry); err != nil {
-						fmt.Fprintf(os.Stderr, "Error: Failed to parse journal record %q\n", line)
+						fmt.Fprintf(os.Stderr, "Error: Failed to parse journal record %s: %v\n", line, err)
 						break
 					}
 
