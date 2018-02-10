@@ -35,7 +35,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mendsley/parchment/netwriter"
@@ -61,6 +63,9 @@ func main() {
 	flagGatewayd := flag.String("gatewayd", "unix:///run/journald.sock", "Endpoint for journald's gatewayd service")
 	flagCursorFile := flag.String("cursorFile", "", "Location to store last cursor retreived")
 	flag.Parse()
+
+	chSignal := make(chan os.Signal, 1)
+	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
 	if *flagTimestamp && *flagTimestampMS {
 		fmt.Fprintf(os.Stderr, "Error: options -t and -tt are mutually exclusive\n")
@@ -132,7 +137,15 @@ func main() {
 		}
 	}
 
+	done := make(chan struct{})
+
 	for {
+		select {
+		case <-done:
+			fmt.Fprintf(os.Stdout, "Got shutdown signal. Exiting")
+			return
+		default:
+		}
 		req, err := http.NewRequest("GET", "http://parchment/entries?boot&follow", nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: Failed to build gatewayd request: %v\n", err)
@@ -157,48 +170,64 @@ func main() {
 			os.Exit(-1)
 		}
 
-		defer resp.Body.Close()
-		br := bufio.NewReader(resp.Body)
+		func() {
+			defer resp.Body.Close()
+			br := bufio.NewReader(resp.Body)
 
-		for {
-			line, err := br.ReadString('\n')
+			cl := make(chan struct{})
+			defer close(cl)
 
-			if ll := len(line); ll > 1 {
-				line = line[:ll-1]
+			go func(c io.Closer, cl chan struct{}) {
+				select {
+				case <-cl:
+					return
+				case <-chSignal:
+					close(done)
+					c.Close()
+				}
+			}(resp.Body, cl)
 
-				if skip > 0 {
-					skip--
-				} else {
-					var entry LogEntry
-					if err := json.Unmarshal([]byte(line), &entry); err != nil {
-						var binEntry LogEntryBinary
-						if err := json.Unmarshal([]byte(line), &binEntry); err != nil {
-							fmt.Fprintf(os.Stderr, "Error: Failed to parse journal record %s: %v\n", line, err)
-							break
+			for {
+				line, err := br.ReadString('\n')
+
+				if ll := len(line); ll > 1 {
+					line = line[:ll-1]
+
+					if skip > 0 {
+						skip--
+					} else {
+						var entry LogEntry
+						if err := json.Unmarshal([]byte(line), &entry); err != nil {
+							var binEntry LogEntryBinary
+							if err := json.Unmarshal([]byte(line), &binEntry); err != nil {
+								fmt.Fprintf(os.Stderr, "Error: Failed to parse journal record %s: %v\n", line, err)
+								break
+							}
+
+							entry.Cursor = binEntry.Cursor
+							entry.SystemdUnit = binEntry.SystemdUnit
+							entry.Message = string(binEntry.Message)
 						}
 
-						entry.Cursor = binEntry.Cursor
-						entry.SystemdUnit = binEntry.SystemdUnit
-						entry.Message = string(binEntry.Message)
-					}
-
-					if category := units[entry.SystemdUnit]; category != nil {
-						if err := w.AddMessage(category, []byte(entry.Message)); err != nil {
-							fmt.Fprintf(os.Stderr, "Error: Failed to write log message to remote: %v", err)
-							break
+						if category := units[entry.SystemdUnit]; category != nil {
+							if err := w.AddMessage(category, []byte(entry.Message)); err != nil {
+								fmt.Fprintf(os.Stderr, "Error: Failed to write log message to remote: %v", err)
+								break
+							}
 						}
-					}
 
-					lastCursor = entry.Cursor
+						lastCursor = entry.Cursor
+					}
+				}
+
+				if err == io.EOF {
+					break
+				} else if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: Failed to read data from journald socket: %v\n", err)
+					break
 				}
 			}
-
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: Failed to read data from journald socket: %v\n", err)
-			}
-		}
+		}()
 
 		if fname := *flagCursorFile; fname != "" {
 			ioutil.WriteFile(fname, []byte(lastCursor), 0666)
