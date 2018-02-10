@@ -43,7 +43,7 @@ import (
 type LogEntry struct {
 	Cursor      string `json:"__CURSOR"`
 	SystemdUnit string `json:"_SYSTEMD_UNIT"`
-	Message     string `json:"MESSAGE"`
+	Message     []byte `json:"MESSAGE"`
 }
 
 func main() {
@@ -158,7 +158,7 @@ func main() {
 					}
 
 					if category := units[entry.SystemdUnit]; category != nil {
-						if err := w.AddMessage(category, []byte(entry.Message)); err != nil {
+						if err := w.AddMessage(category, entry.Message); err != nil {
 							fmt.Fprintf(os.Stderr, "Error: Failed to write log message to remote: %v", err)
 							break
 						}
