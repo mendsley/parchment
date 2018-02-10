@@ -31,6 +31,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -58,6 +59,7 @@ func main() {
 	flagTimeout := flag.Duration("timeout", 10*time.Second, "Timeout duration for connect/send operations")
 	flagUnits := flag.String("units", "", "Comma-separated list of unit=category,unit=category mappings")
 	flagGatewayd := flag.String("gatewayd", "unix:///run/journald.sock", "Endpoint for journald's gatewayd service")
+	flagCursorFile := flag.String("cursorFile", "", "Location to store last cursor retreived")
 	flag.Parse()
 
 	if *flagTimestamp && *flagTimestampMS {
@@ -119,6 +121,16 @@ func main() {
 		lastCursor = ""
 		skip       = 0
 	)
+
+	if fname := *flagCursorFile; fname != "" {
+		data, err := ioutil.ReadFile(fname)
+		if err == nil {
+			lastCursor = string(data)
+		} else if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: Failed to open cursor file %s: %v", fname, err)
+			os.Exit(-1)
+		}
+	}
 
 	for {
 		req, err := http.NewRequest("GET", "http://parchment/entries?boot&follow", nil)
@@ -186,6 +198,10 @@ func main() {
 			} else if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: Failed to read data from journald socket: %v\n", err)
 			}
+		}
+
+		if fname := *flagCursorFile; fname != "" {
+			ioutil.WriteFile(fname, []byte(lastCursor), 0666)
 		}
 	}
 }
