@@ -43,6 +43,12 @@ import (
 type LogEntry struct {
 	Cursor      string `json:"__CURSOR"`
 	SystemdUnit string `json:"_SYSTEMD_UNIT"`
+	Message     string `json:"MESSAGE"`
+}
+
+type LogEntryBinary struct {
+	Cursor      string `json:"__CURSOR"`
+	SystemdUnit string `json:"_SYSTEMD_UNIT"`
 	Message     []byte `json:"MESSAGE"`
 }
 
@@ -153,12 +159,19 @@ func main() {
 				} else {
 					var entry LogEntry
 					if err := json.Unmarshal([]byte(line), &entry); err != nil {
-						fmt.Fprintf(os.Stderr, "Error: Failed to parse journal record %s: %v\n", line, err)
-						break
+						var binEntry LogEntryBinary
+						if err := json.Unmarshal([]byte(line), &binEntry); err != nil {
+							fmt.Fprintf(os.Stderr, "Error: Failed to parse journal record %s: %v\n", line, err)
+							break
+						}
+
+						entry.Cursor = binEntry.Cursor
+						entry.SystemdUnit = binEntry.SystemdUnit
+						entry.Message = string(binEntry.Message)
 					}
 
 					if category := units[entry.SystemdUnit]; category != nil {
-						if err := w.AddMessage(category, entry.Message); err != nil {
+						if err := w.AddMessage(category, []byte(entry.Message)); err != nil {
 							fmt.Fprintf(os.Stderr, "Error: Failed to write log message to remote: %v", err)
 							break
 						}
