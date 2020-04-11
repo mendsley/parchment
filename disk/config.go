@@ -51,20 +51,44 @@ func (c *Config) GetOldestFileSuffix() (int, error) {
 }
 
 func (c *Config) getFileSuffix(initial int, compare func(current, previous int) bool) (int, error) {
+	fl := c.NewFileList()
+	err := c.PopulateFileList(fl)
+	if err != nil {
+		return -1, err
+	}
+
+	return c.getFileSuffixDirect(fl, initial, compare)
+}
+
+func (c *Config) NewFileList() *FileList {
+	return &FileList{}
+}
+
+func (c *Config) PopulateFileList(fl *FileList) error {
 	dir, err := os.Open(c.Directory)
 	if err != nil {
-		return -1, fmt.Errorf("Failed to open disk directory '%s': %v", c.Directory, err)
+		return fmt.Errorf("Failed to open disk directory '%s': %v", c.Directory, err)
 	}
 
 	files, err := dir.Readdirnames(-1)
 	dir.Close()
 	if err != nil {
-		return -1, fmt.Errorf("Failed to acces disk directory '%s': %v", c.Directory, err)
+		return fmt.Errorf("Failed to acces disk directory '%s': %v", c.Directory, err)
 	}
 
+	fl.files = files
+	return nil
+}
+
+type FileList struct {
+	files []string
+}
+
+func (c *Config) getFileSuffixDirect(fl *FileList, initial int, compare func(current, previous int) bool) (int, error) {
 	// find best file using `compare'
 	bestSuffix := initial
-	for _, name := range files {
+	bestIndex := -1
+	for index, name := range fl.files {
 		if !strings.HasPrefix(name, c.BaseName) {
 			continue
 		} else if len(name) < len(c.BaseName)+2 {
@@ -81,9 +105,15 @@ func (c *Config) getFileSuffix(initial int, compare func(current, previous int) 
 		suffix := int(suffix64)
 		if compare(suffix, bestSuffix) {
 			bestSuffix = suffix
+			bestIndex = index
 		}
 	}
 
-	return bestSuffix, nil
+	// remove the entry from the list
+	if bestIndex != -1 {
+		copy(fl.files[bestIndex:], fl.files[bestIndex+1:])
+		fl.files = fl.files[:len(fl.files)-1]
+	}
 
+	return bestSuffix, nil
 }
