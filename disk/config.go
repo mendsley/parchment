@@ -46,8 +46,8 @@ func (c *Config) GetNewestFileSuffix() (int, error) {
 	return c.getFileSuffix(-1, func(current, previous int) bool { return current > previous })
 }
 
-func (c *Config) GetOldestFileSuffix() (int, error) {
-	return c.getFileSuffix(-1, func(current, previous int) bool { return previous < 0 || current < previous })
+func (c *Config) GetOldestFileSuffix(fl *FileList) (int, error) {
+	return c.getFileSuffixDirect(fl, -1, func(current, previous int) bool { return previous < 0 || current < previous })
 }
 
 func (c *Config) getFileSuffix(initial int, compare func(current, previous int) bool) (int, error) {
