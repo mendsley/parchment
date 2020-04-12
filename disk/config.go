@@ -52,8 +52,8 @@ func (c *Config) GetNewestFileSuffix() (int, error) {
 		return -1, nil
 	}
 
-	suffix := fl.suffixes[len(fl.suffixes)-1]
-
+	suffix := fl.suffixes[0]
+	copy(fl.suffixes, fl.suffixes[1:])
 	fl.suffixes = fl.suffixes[:len(fl.suffixes)-1]
 	return suffix, nil
 }
@@ -63,9 +63,7 @@ func (c *Config) GetOldestFileSuffix(fl *FileList) (int, error) {
 		return -1, nil
 	}
 
-	suffix := fl.suffixes[0]
-
-	copy(fl.suffixes, fl.suffixes[1:])
+	suffix := fl.suffixes[len(fl.suffixes)-1]
 	fl.suffixes = fl.suffixes[:len(fl.suffixes)-1]
 	return suffix, nil
 }
@@ -105,8 +103,8 @@ func (c *Config) PopulateFileList(fl *FileList) error {
 		suffixes = append(suffixes, int(suffix64))
 	}
 
+	sort.Sort(sort.Reverse(sort.IntSlice(suffixes)))
 	fl.suffixes = suffixes
-	sort.Ints(fl.suffixes)
 	return nil
 }
 
