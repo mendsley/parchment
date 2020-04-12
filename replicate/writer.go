@@ -222,10 +222,12 @@ func (w *Writer) runReplicating(dw *disk.Writer, remote *net.Writer) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	fileList := dw.Config.NewFileList()
+
 	// send disk entries to the remote host
 	for {
 		w.lock.Unlock()
-		entries, err := disk.LoadOldestMessages(&dw.Config)
+		entries, err := disk.LoadOldestMessages(&dw.Config, fileList)
 		w.lock.Lock()
 
 		if err == io.EOF {

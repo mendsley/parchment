@@ -38,10 +38,16 @@ type DiskChain struct {
 	filepath string
 }
 
-func LoadOldestMessages(c *Config) (DiskChain, error) {
+func LoadOldestMessages(c *Config, fl *FileList) (DiskChain, error) {
 	for {
+		if len(fl.files) == 0 {
+			if err := c.PopulateFileList(fl); err != nil {
+				return DiskChain{}, err
+			}
+		}
+
 		// get the oldest file
-		suffix, err := c.GetOldestFileSuffix()
+		suffix, err := c.GetOldestFileSuffix(fl)
 		if err != nil {
 			return DiskChain{}, err
 		} else if suffix == -1 {
