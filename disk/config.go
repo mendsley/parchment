@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -43,21 +44,30 @@ func (c *Config) MakeFilename(suffix int) string {
 }
 
 func (c *Config) GetNewestFileSuffix() (int, error) {
-	return c.getFileSuffix(-1, func(current, previous int) bool { return current > previous })
+	fl := c.NewFileList()
+	if err := c.PopulateFileList(fl); err != nil {
+		return -1, err
+	}
+	if len(fl.suffixes) == 0 {
+		return -1, nil
+	}
+
+	suffix := fl.suffixes[len(fl.suffixes)-1]
+
+	fl.suffixes = fl.suffixes[:len(fl.suffixes)-1]
+	return suffix, nil
 }
 
 func (c *Config) GetOldestFileSuffix(fl *FileList) (int, error) {
-	return c.getFileSuffixDirect(fl, -1, func(current, previous int) bool { return previous < 0 || current < previous })
-}
-
-func (c *Config) getFileSuffix(initial int, compare func(current, previous int) bool) (int, error) {
-	fl := c.NewFileList()
-	err := c.PopulateFileList(fl)
-	if err != nil {
-		return -1, err
+	if len(fl.suffixes) == 0 {
+		return -1, nil
 	}
 
-	return c.getFileSuffixDirect(fl, initial, compare)
+	suffix := fl.suffixes[0]
+
+	copy(fl.suffixes, fl.suffixes[1:])
+	fl.suffixes = fl.suffixes[:len(fl.suffixes)-1]
+	return suffix, nil
 }
 
 func (c *Config) NewFileList() *FileList {
@@ -76,19 +86,9 @@ func (c *Config) PopulateFileList(fl *FileList) error {
 		return fmt.Errorf("Failed to acces disk directory '%s': %v", c.Directory, err)
 	}
 
-	fl.files = files
-	return nil
-}
-
-type FileList struct {
-	files []string
-}
-
-func (c *Config) getFileSuffixDirect(fl *FileList, initial int, compare func(current, previous int) bool) (int, error) {
-	// find best file using `compare'
-	bestSuffix := initial
-	bestIndex := -1
-	for index, name := range fl.files {
+	// parse out suffixes
+	suffixes := make([]int, 0, len(files))
+	for _, name := range files {
 		if !strings.HasPrefix(name, c.BaseName) {
 			continue
 		} else if len(name) < len(c.BaseName)+2 {
@@ -102,18 +102,14 @@ func (c *Config) getFileSuffixDirect(fl *FileList, initial int, compare func(cur
 			continue
 		}
 
-		suffix := int(suffix64)
-		if compare(suffix, bestSuffix) {
-			bestSuffix = suffix
-			bestIndex = index
-		}
+		suffixes = append(suffixes, int(suffix64))
 	}
 
-	// remove the entry from the list
-	if bestIndex != -1 {
-		copy(fl.files[bestIndex:], fl.files[bestIndex+1:])
-		fl.files = fl.files[:len(fl.files)-1]
-	}
+	fl.suffixes = suffixes
+	sort.Ints(fl.suffixes)
+	return nil
+}
 
-	return bestSuffix, nil
+type FileList struct {
+	suffixes []int
 }

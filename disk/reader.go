@@ -40,7 +40,7 @@ type DiskChain struct {
 
 func LoadOldestMessages(c *Config, fl *FileList) (DiskChain, error) {
 	for {
-		if len(fl.files) == 0 {
+		if len(fl.suffixes) == 0 {
 			if err := c.PopulateFileList(fl); err != nil {
 				return DiskChain{}, err
 			}
